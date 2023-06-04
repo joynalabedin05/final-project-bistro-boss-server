@@ -171,7 +171,7 @@ async function run() {
     // create payment intent
     app.post('/create-payment-intent',verifyJWT, async(req,res)=>{
       const {price} = req.body;
-      const amount = price*100;
+      const amount = parseInt(price*100);
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
         currency: 'usd',
@@ -205,7 +205,56 @@ async function run() {
       const query = {_id: {$in: payment.cartItems.map(id=>new ObjectId(id))}};
       const deleteResult = await cartCollection.deleteMany(query);
       res.send({insertResult, deleteResult});
+    });
+
+     /**
+    * ---------------
+    * BANGLA SYSTEM(second best solution)
+    * ---------------
+    * 1. load all payments
+    * 2. for each payment, get the menuItems array
+    * 3. for each item in the menuItems array get the menuItem from the menu collection
+    * 4. put them in an array: allOrderedItems
+    * 5. separate allOrderedItems by category using filter
+    * 6. now get the quantity by using length: pizzas.length
+    * 7. for each category use reduce to get the total amount spent on this category
+    * 
+   */
+     app.get('/order-stats', verifyJWT, verifyAdmin, async(req, res) =>{
+      const pipeline = [
+        {
+          $lookup: {
+            from: 'menu',
+            localField: 'menuItems',
+            foreignField: '_id',
+            as: 'menuItemsData'
+          }
+        },
+        {
+          $unwind: '$menuItemsData'
+        },
+        {
+          $group: {
+            _id: '$menuItemsData.category',
+            count: { $sum: 1 },
+            total: { $sum: '$menuItemsData.price' }
+          }
+        },
+        {
+          $project: {
+            category: '$_id',
+            count: 1,
+            total: { $round: ['$total', 2] },
+            _id: 0
+          }
+        }
+      ];
+
+      const result = await paymentCollection.aggregate(pipeline).toArray()
+      res.send(result)
+
     })
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
