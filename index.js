@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const nodemailer = require("nodemailer");
+const mg = require('nodemailer-mailgun-transport');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const app = express();
@@ -12,6 +14,49 @@ const port = process.env.PORT || 5000;
 // MIDDELWARE
 app.use(cors());
 app.use(express.json());
+
+
+// send email confirm email
+// let transporter = nodemailer.createTransport({
+//   host: 'smtp.sendgrid.net',
+//   port: 587,
+//   auth: {
+//       user: "apikey",
+//       pass: process.env.SENDGRID_API_KEY
+//   }
+// })
+
+const auth = {
+  auth: {
+    api_key: process.env.EMAIL_PRIVATE_KEY,
+    domain: process.env.ENAIL_DOMAIN
+  }
+}
+const transporter = nodemailer.createTransport(mg(auth));
+
+const sendConfirmationEmail = (payment)=>{
+  transporter.sendMail({
+    from: "joynal05101993@gmail.com", // verified sender email
+    to: "joynal05101993@gmail.com", // recipient email
+    subject: "Your order is confirmed. Enjoy the Food.", // Subject line
+    text: "Hello world!", // plain text body
+    html: `
+     <div>
+        <h2>Payment confirmed</h2>
+        <p>TransactionId: ${payment.transactionId}</p>
+     </div>
+    `, 
+    
+    // html body
+  }, function(error, info){
+    if (error) {
+      console.log(error);
+    } else {
+      console.log('Email sent: ' + info.response);
+    }
+  });
+}
+
 // veryfy jwt
 const verifyJWT = (req, res, next)=>{
   const authorization = req.headers.authorization;
@@ -204,8 +249,17 @@ async function run() {
       const insertResult = await paymentCollection.insertOne(payment);
       const query = {_id: {$in: payment.cartItems.map(id=>new ObjectId(id))}};
       const deleteResult = await cartCollection.deleteMany(query);
+
+      // send an email confirming payments
+
+      sendConfirmationEmail(payment);
+
+      console.log(payment);
+
       res.send({insertResult, deleteResult});
     });
+
+   
 
      /**
     * ---------------
